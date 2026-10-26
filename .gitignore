@@ -1,0 +1,13 @@
+# Maven build output
+**/target/
+
+# Environment variables and secrets
+.env
+**/.env
+.env.*
+!.env.example
+**/.env.example
+
+# IDE files
+.idea/
+*.iml
