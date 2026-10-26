@@ -1,0 +1,13 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="OrderNotificationApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="order-notification-service" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.order.notification.OrderNotificationApplication" />
+    <envs>
+      <env name="MQ_USER" value="app" />
+      <env name="MQ_PASSWORD" value="passw0rd" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
