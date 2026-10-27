@@ -11,3 +11,4 @@
 # IDE files
 .idea/
 *.iml
+debezium/secrets/

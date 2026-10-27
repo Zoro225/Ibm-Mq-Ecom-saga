@@ -1,0 +1,77 @@
+services:
+  ibm-mq:
+    build:
+      context: ./mq-config
+      dockerfile: Dockerfile
+    image: ibm-mq-order-saga:9.4.3.0-r1
+    container_name: ibm-mq
+    environment:
+      LICENSE: accept
+      MQ_QMGR_NAME: QM1
+      MQ_CONNAUTH_USE_HTP: "true"
+    ports:
+      - "127.0.0.1:1414:1414"
+      - "127.0.0.1:9443:9443"
+    secrets:
+      - mqAppPassword
+      - mqAdminPassword
+    volumes:
+      - mq-data:/mnt/mqm
+    restart: unless-stopped
+
+  postgres-order:
+    image: postgres:16
+    container_name: postgres-order
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-order-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  postgres-inventory:
+    image: postgres:16
+    container_name: postgres-inventory
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-inventory-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  postgres-payment:
+    image: postgres:16
+    container_name: postgres-payment
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-payment-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  postgres-notification:
+    image: postgres:16
+    container_name: postgres-notification
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-notification-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  mq-data:
+  postgres-order-data:
+  postgres-inventory-data:
+  postgres-payment-data:
+  postgres-notification-data:
+
+secrets:
+  mqAppPassword:
+    file: ./secrets/mqAppPassword
+  mqAdminPassword:
+    file: ./secrets/mqAdminPassword
