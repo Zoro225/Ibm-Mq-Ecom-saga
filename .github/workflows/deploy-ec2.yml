@@ -1,4 +1,3 @@
-
 name: Deploy Order Saga to EC2
 
 on:
@@ -29,7 +28,7 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy to existing EC2
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.0
         env:
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
@@ -55,18 +54,24 @@ jobs:
             esac
 
             cd "$EC2_APP_DIR"
+
             test -d .git
             test -f debezium/docker-compose.yml
             test -f debezium/.env
             test -f debezium/secrets/mqAppPassword
             test -f debezium/secrets/mqAdminPassword
 
-            # Refuse to proceed if the existing infrastructure is missing.
-            for container in ibm-mq postgres-order postgres-inventory postgres-payment postgres-notification; do
+            # Verify infrastructure containers exist.
+            for container in \
+              ibm-mq \
+              postgres-order \
+              postgres-inventory \
+              postgres-payment \
+              postgres-notification; do
               docker inspect "$container" >/dev/null
             done
 
-            # Verify the exact persistent volumes before touching the app.
+            # Verify persistent volumes exist.
             for volume in \
               debezium_mq-data \
               debezium_postgres-order-data \
@@ -76,57 +81,52 @@ jobs:
               docker volume inspect "$volume" >/dev/null
             done
 
-            # Protect the real environment file from the repository update.
-            backup_dir="$(mktemp -d)"
-            cp -p debezium/.env "$backup_dir/.env"
-            cleanup() {
-              cp -p "$backup_dir/.env" "$EC2_APP_DIR/debezium/.env"
-              rm -rf "$backup_dir"
-              docker logout >/dev/null 2>&1 || true
-            }
-            trap cleanup EXIT
-
-            # Update the checked-out project without discarding local changes.
-            test -z "$(git status --porcelain)"
-            git fetch origin main
-            git merge --ff-only origin/main
-
-            # Restore real settings and keep the existing Compose project name.
-            cp -p "$backup_dir/.env" debezium/.env
             cd debezium
             export COMPOSE_PROJECT_NAME=debezium
             export DOCKERHUB_USERNAME IMAGE_TAG
 
-            # Validate configuration before deploying.
-            docker compose config --quiet
+            # Validate the existing EC2 Compose configuration.
+            docker compose --env-file .env config --quiet
 
-            # Pull only application images; do not pull or rebuild databases/MQ.
+            # Authenticate to Docker Hub without printing the token.
             printf '%s' "$DOCKERHUB_TOKEN" |
-              docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+              docker login \
+                --username "$DOCKERHUB_USERNAME" \
+                --password-stdin
 
-            docker compose pull \
+            cleanup() {
+              docker logout >/dev/null 2>&1 || true
+            }
+            trap cleanup EXIT
+
+            # Pull only the four application images.
+            docker compose --env-file .env pull \
               order-producer-service \
               order-inventory-service \
               order-payment-service \
               order-notification-service
 
-            # Recreate only the four app services, not infrastructure or volumes.
-            docker compose up -d --no-build --no-deps \
+            # Recreate only application services.
+            # Do not recreate MQ, PostgreSQL, or persistent volumes.
+            docker compose --env-file .env up -d \
+              --no-build \
+              --no-deps \
               order-producer-service \
               order-inventory-service \
               order-payment-service \
               order-notification-service
 
-            # Confirm all four app containers are running.
+            # Verify all four services are running.
             for service in \
               order-producer-service \
               order-inventory-service \
               order-payment-service \
               order-notification-service; do
-              if ! docker compose ps --status running -q "$service" | grep -q .; then
-                docker compose logs --tail=80 "$service" || true
+              if ! docker compose --env-file .env ps \
+                --status running -q "$service" | grep -q .; then
+                docker compose --env-file .env logs --tail=80 "$service" || true
                 exit 1
               fi
             done
 
-            docker compose ps
+            docker compose --env-file .env ps
