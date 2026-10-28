@@ -1,0 +1,42 @@
+﻿
+name: Docker Compose Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate-compose:
+    name: Validate Compose Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Compose
+        uses: docker/setup-compose-action@v2
+
+      - name: Create validation-only environment and secret files
+        working-directory: debezium
+        run: |
+          cat > .env <<'EOF'
+          MQ_USER=app
+          MQ_PASSWORD=validation_only_password
+          MQ_ADMIN_PASSWORD=validation_only_admin_password
+          POSTGRES_USER=validation_user
+          POSTGRES_PASSWORD=validation_only_db_password
+          EOF
+
+          mkdir -p secrets
+          printf '%s' 'validation_only_password' > secrets/mqAppPassword
+          printf '%s' 'validation_only_admin_password' > secrets/mqAdminPassword
+
+      - name: Validate Compose configuration
+        working-directory: debezium
+        run: docker compose config --quiet

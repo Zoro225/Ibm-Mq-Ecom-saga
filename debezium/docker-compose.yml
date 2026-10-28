@@ -9,15 +9,22 @@ services:
       LICENSE: accept
       MQ_QMGR_NAME: QM1
       MQ_CONNAUTH_USE_HTP: "true"
-    ports:
-      - "127.0.0.1:1414:1414"
-      - "127.0.0.1:9443:9443"
     secrets:
       - mqAppPassword
       - mqAdminPassword
+    ports:
+      - "127.0.0.1:1414:1414"
+      - "127.0.0.1:9443:9443"
     volumes:
       - mq-data:/mnt/mqm
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "dspmq -m QM1 | grep -q Running"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
 
   postgres-order:
     image: postgres:16
@@ -29,6 +36,11 @@ services:
     volumes:
       - postgres-order-data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d order_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   postgres-inventory:
     image: postgres:16
@@ -40,6 +52,11 @@ services:
     volumes:
       - postgres-inventory-data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d inventory_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   postgres-payment:
     image: postgres:16
@@ -51,6 +68,11 @@ services:
     volumes:
       - postgres-payment-data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d payment_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   postgres-notification:
     image: postgres:16
@@ -62,6 +84,83 @@ services:
     volumes:
       - postgres-notification-data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d notification_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  order-producer-service:
+    image: ${DOCKERHUB_USERNAME:-aj12321}/order-producer-service:${IMAGE_TAG:-build-1}
+    container_name: order-producer-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/order_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      MQ_USER: ${MQ_USER:-app}
+      MQ_PASSWORD: ${MQ_PASSWORD:?Set MQ_PASSWORD in .env}
+    depends_on:
+      postgres-order:
+        condition: service_healthy
+      ibm-mq:
+        condition: service_healthy
+
+  order-inventory-service:
+    image: ${DOCKERHUB_USERNAME:-aj12321}/order-inventory-service:${IMAGE_TAG:-build-1}
+    container_name: order-inventory-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-inventory:5432/inventory_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      MQ_USER: ${MQ_USER:-app}
+      MQ_PASSWORD: ${MQ_PASSWORD:?Set MQ_PASSWORD in .env}
+    depends_on:
+      postgres-inventory:
+        condition: service_healthy
+      ibm-mq:
+        condition: service_healthy
+
+  order-payment-service:
+    image: ${DOCKERHUB_USERNAME:-aj12321}/order-payment-service:${IMAGE_TAG:-build-1}
+    container_name: order-payment-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-payment:5432/payment_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      MQ_USER: ${MQ_USER:-app}
+      MQ_PASSWORD: ${MQ_PASSWORD:?Set MQ_PASSWORD in .env}
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+      ibm-mq:
+        condition: service_healthy
+
+  order-notification-service:
+    image: ${DOCKERHUB_USERNAME:-aj12321}/order-notification-service:${IMAGE_TAG:-build-1}
+    container_name: order-notification-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-notification:5432/notification_db
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      MQ_USER: ${MQ_USER:-app}
+      MQ_PASSWORD: ${MQ_PASSWORD:?Set MQ_PASSWORD in .env}
+    depends_on:
+      postgres-notification:
+        condition: service_healthy
+      ibm-mq:
+        condition: service_healthy
 
 volumes:
   mq-data:
