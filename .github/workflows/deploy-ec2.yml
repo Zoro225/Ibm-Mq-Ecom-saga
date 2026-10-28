@@ -1,0 +1,132 @@
+
+name: Deploy Order Saga to EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Existing Docker Hub image tag, e.g. build-12"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy application services
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Validate deployment inputs
+        shell: bash
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ ! "$IMAGE_TAG" =~ ^build-[0-9]+$ ]]; then
+            echo "Invalid image tag. Expected build-N, e.g. build-12."
+            exit 1
+          fi
+
+      - name: Deploy to existing EC2
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: EC2_APP_DIR,IMAGE_TAG,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
+          command_timeout: 15m
+          script: |
+            set -eu
+
+            : "${EC2_APP_DIR:?Missing EC2_APP_DIR secret}"
+            : "${DOCKERHUB_USERNAME:?Missing Docker Hub username}"
+            : "${DOCKERHUB_TOKEN:?Missing Docker Hub token}"
+
+            case "$IMAGE_TAG" in
+              build-[0-9]*) ;;
+              *) echo "Invalid image tag"; exit 1 ;;
+            esac
+
+            cd "$EC2_APP_DIR"
+            test -d .git
+            test -f debezium/docker-compose.yml
+            test -f debezium/.env
+            test -f debezium/secrets/mqAppPassword
+            test -f debezium/secrets/mqAdminPassword
+
+            # Refuse to proceed if the existing infrastructure is missing.
+            for container in ibm-mq postgres-order postgres-inventory postgres-payment postgres-notification; do
+              docker inspect "$container" >/dev/null
+            done
+
+            # Verify the exact persistent volumes before touching the app.
+            for volume in \
+              debezium_mq-data \
+              debezium_postgres-order-data \
+              debezium_postgres-inventory-data \
+              debezium_postgres-payment-data \
+              debezium_postgres-notification-data; do
+              docker volume inspect "$volume" >/dev/null
+            done
+
+            # Protect the real environment file from the repository update.
+            backup_dir="$(mktemp -d)"
+            cp -p debezium/.env "$backup_dir/.env"
+            cleanup() {
+              cp -p "$backup_dir/.env" "$EC2_APP_DIR/debezium/.env"
+              rm -rf "$backup_dir"
+              docker logout >/dev/null 2>&1 || true
+            }
+            trap cleanup EXIT
+
+            # Update the checked-out project without discarding local changes.
+            test -z "$(git status --porcelain)"
+            git fetch origin main
+            git merge --ff-only origin/main
+
+            # Restore real settings and keep the existing Compose project name.
+            cp -p "$backup_dir/.env" debezium/.env
+            cd debezium
+            export COMPOSE_PROJECT_NAME=debezium
+            export DOCKERHUB_USERNAME IMAGE_TAG
+
+            # Validate configuration before deploying.
+            docker compose config --quiet
+
+            # Pull only application images; do not pull or rebuild databases/MQ.
+            printf '%s' "$DOCKERHUB_TOKEN" |
+              docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+
+            docker compose pull \
+              order-producer-service \
+              order-inventory-service \
+              order-payment-service \
+              order-notification-service
+
+            # Recreate only the four app services, not infrastructure or volumes.
+            docker compose up -d --no-build --no-deps \
+              order-producer-service \
+              order-inventory-service \
+              order-payment-service \
+              order-notification-service
+
+            # Confirm all four app containers are running.
+            for service in \
+              order-producer-service \
+              order-inventory-service \
+              order-payment-service \
+              order-notification-service; do
+              if ! docker compose ps --status running -q "$service" | grep -q .; then
+                docker compose logs --tail=80 "$service" || true
+                exit 1
+              fi
+            done
+
+            docker compose ps
