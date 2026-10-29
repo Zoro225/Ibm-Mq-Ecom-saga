@@ -1,3 +1,5 @@
+
+
 package com.order.notification.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,42 +29,62 @@ public class NotificationMQConfig {
 
     @Bean
     public ObjectMapper objectMapper() {
-        ObjectMapper m = new ObjectMapper();
-        m.registerModule(new JavaTimeModule());
-        return m;
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        return mapper;
     }
 
     @Bean
-    public MessageConverter jacksonJmsMessageConverter(ObjectMapper om) {
-        MappingJackson2MessageConverter c = new MappingJackson2MessageConverter();
-        c.setObjectMapper(om);
-        c.setTargetType(MessageType.TEXT);
-        c.setTypeIdPropertyName("_type");
+    public MessageConverter jacksonJmsMessageConverter(ObjectMapper mapper) {
+        MappingJackson2MessageConverter converter =
+                new MappingJackson2MessageConverter();
 
-        Map<String, Class<?>> mp = new HashMap<>();
-        mp.put("com.order.producer.model.OrderMessage", OrderMessage.class);
-        mp.put("com.order.payment.model.OrderMessage", OrderMessage.class);
-        c.setTypeIdMappings(mp);
-        return c;
+        converter.setObjectMapper(mapper);
+        converter.setTargetType(MessageType.TEXT);
+        converter.setTypeIdPropertyName("_type");
+
+        Map<String, Class<?>> typeMappings = new HashMap<>();
+        typeMappings.put(
+                "com.order.producer.model.OrderMessage",
+                OrderMessage.class
+        );
+        typeMappings.put(
+                "com.order.payment.model.OrderMessage",
+                OrderMessage.class
+        );
+
+        converter.setTypeIdMappings(typeMappings);
+        return converter;
     }
 
     @Bean
-    public DefaultJmsListenerContainerFactory jmsListenerContainerFactory(ConnectionFactory cf, MessageConverter mc) {
-        DefaultJmsListenerContainerFactory f = new DefaultJmsListenerContainerFactory();
-        f.setConnectionFactory(cf);
-        f.setMessageConverter(mc);
-        f.setConcurrency(concurrency);
-        f.setSessionAcknowledgeMode(Session.CLIENT_ACKNOWLEDGE);
-        f.setRecoveryInterval(5000L);
-        f.setErrorHandler(t -> System.err.println("Notification listener error: " + t.getMessage()));
-        return f;
+    public DefaultJmsListenerContainerFactory jmsListenerContainerFactory(
+            ConnectionFactory connectionFactory,
+            MessageConverter messageConverter) {
+
+        DefaultJmsListenerContainerFactory factory =
+                new DefaultJmsListenerContainerFactory();
+
+        factory.setConnectionFactory(connectionFactory);
+        factory.setMessageConverter(messageConverter);
+        factory.setConcurrency(concurrency);
+        factory.setSessionAcknowledgeMode(Session.CLIENT_ACKNOWLEDGE);
+        factory.setRecoveryInterval(5000L);
+
+        // Print the full exception and stack trace for diagnosis.
+        factory.setErrorHandler(Throwable::printStackTrace);
+
+        return factory;
     }
 
     @Bean
-    public JmsTemplate jmsTemplate(ConnectionFactory cf, MessageConverter mc) {
-        JmsTemplate t = new JmsTemplate(cf);
-        t.setMessageConverter(mc);
-        t.setDeliveryPersistent(true);
-        return t;
+    public JmsTemplate jmsTemplate(
+            ConnectionFactory connectionFactory,
+            MessageConverter messageConverter) {
+
+        JmsTemplate template = new JmsTemplate(connectionFactory);
+        template.setMessageConverter(messageConverter);
+        template.setDeliveryPersistent(true);
+        return template;
     }
 }
