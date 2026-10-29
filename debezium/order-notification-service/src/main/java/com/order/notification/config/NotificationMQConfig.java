@@ -1,5 +1,4 @@
 
-
 package com.order.notification.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,12 +43,19 @@ public class NotificationMQConfig {
         converter.setTypeIdPropertyName("_type");
 
         Map<String, Class<?>> typeMappings = new HashMap<>();
+
         typeMappings.put(
                 "com.order.producer.model.OrderMessage",
                 OrderMessage.class
         );
+
         typeMappings.put(
                 "com.order.payment.model.OrderMessage",
+                OrderMessage.class
+        );
+
+        typeMappings.put(
+                "com.order.inventory.model.OrderMessage",
                 OrderMessage.class
         );
 
