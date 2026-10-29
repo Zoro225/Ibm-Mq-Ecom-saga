@@ -9,6 +9,8 @@ services:
       LICENSE: accept
       MQ_QMGR_NAME: QM1
       MQ_CONNAUTH_USE_HTP: "true"
+      MQ_APP_PASSWORD: ${MQ_PASSWORD:?Set MQ_PASSWORD in .env}
+      MQ_ADMIN_PASSWORD: ${MQ_ADMIN_PASSWORD:?Set MQ_ADMIN_PASSWORD in .env}
     secrets:
       - mqAppPassword
       - mqAdminPassword
@@ -24,7 +26,6 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
-
 
   postgres-order:
     image: postgres:16
