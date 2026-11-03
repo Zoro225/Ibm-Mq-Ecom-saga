@@ -36,9 +36,9 @@ resource "aws_db_instance" "main" {
   auto_minor_version_upgrade = true
   apply_immediately          = true
 
-  deletion_protection       = true
-  skip_final_snapshot       = false
-  final_snapshot_identifier = "${var.project_name}-final-snapshot"
+  deletion_protection = false
+  skip_final_snapshot = true
+
 
   tags = {
     Name    = "${var.project_name}-postgres"
