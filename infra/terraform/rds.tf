@@ -2,7 +2,12 @@
 resource "aws_db_subnet_group" "main" {
   name        = "${var.project_name}-db-subnet-group"
   description = "Private subnets for Order Saga PostgreSQL"
-  subnet_ids  = [for subnet in aws_subnet.main : subnet.id if startswith(subnet.tags["Tier"], "database") || subnet.tags["Tier"] == "db"]
+
+  subnet_ids = [
+    for subnet in aws_subnet.main :
+    subnet.id
+    if startswith(subnet.tags["Tier"], "database") || subnet.tags["Tier"] == "db"
+  ]
 
   tags = {
     Name    = "${var.project_name}-db-subnet-group"
@@ -20,7 +25,8 @@ resource "aws_db_instance" "main" {
   max_allocated_storage = 100
   storage_type          = "gp3"
   storage_encrypted     = true
-  kms_key_id            = "arn:aws:kms:us-east-1:824225573600:key/3c33b2e9-1feb-411c-8216-8f14506cf828"
+
+  # Omit kms_key_id to use the AWS-managed aws/rds key.
 
   db_name  = "order_db"
   username = "appadmin"
@@ -38,7 +44,6 @@ resource "aws_db_instance" "main" {
 
   deletion_protection = false
   skip_final_snapshot = true
-
 
   tags = {
     Name    = "${var.project_name}-postgres"
