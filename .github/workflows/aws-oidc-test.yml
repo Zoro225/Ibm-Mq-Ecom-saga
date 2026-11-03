@@ -52,3 +52,35 @@ jobs:
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
+      - name: Check ECS cluster
+        run: |
+          aws ecs describe-clusters \
+            --clusters order-saga-cluster \
+            --region us-east-1
+
+      - name: Check ECS services
+        run: |
+          aws ecs list-services \
+            --cluster order-saga-cluster \
+            --region us-east-1
+
+      - name: Check load balancers
+        run: |
+          aws elbv2 describe-load-balancers \
+            --region us-east-1
+
+      - name: Check RDS instances
+        run: |
+          aws rds describe-db-instances \
+            --region us-east-1
+
+      - name: Check VPCs
+        run: |
+          aws ec2 describe-vpcs \
+            --region us-east-1
+
+      - name: Check security groups
+        run: |
+          aws ec2 describe-security-groups \
+            --region us-east-1
+
