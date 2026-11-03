@@ -1,0 +1,63 @@
+
+name: Terraform State S3 Access Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-s3-access:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::824225573600:role/OrderSagaGitHubActionsRole
+          aws-region: us-east-1
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Check Terraform state bucket
+        run: |
+          BUCKET="order-saga-terraform-state-824225573600"
+
+          aws s3api get-bucket-location \
+            --bucket "$BUCKET"
+
+          aws s3api get-bucket-versioning \
+            --bucket "$BUCKET"
+
+          aws s3api get-bucket-encryption \
+            --bucket "$BUCKET"
+
+          aws s3api get-public-access-block \
+            --bucket "$BUCKET"
+
+      - name: Test Terraform lockfile permissions
+        run: |
+          BUCKET="order-saga-terraform-state-824225573600"
+          KEY="order-saga/terraform.tfstate.tflock"
+
+          echo "Terraform S3 access test" > /tmp/terraform-lock-test
+
+          aws s3api put-object \
+            --bucket "$BUCKET" \
+            --key "$KEY" \
+            --body /tmp/terraform-lock-test
+
+          aws s3api head-object \
+            --bucket "$BUCKET" \
+            --key "$KEY"
+
+          aws s3api delete-object \
+            --bucket "$BUCKET" \
+            --key "$KEY"
+
+          echo "S3 lockfile permissions verified"
+
+
