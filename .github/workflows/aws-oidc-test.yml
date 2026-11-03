@@ -50,7 +50,8 @@ jobs:
           aws-region: us-east-1
 
       - name: Verify AWS identity
-        run: aws sts get-caller-identity
+        run: |
+          aws sts get-caller-identity
 
       - name: Check ECS cluster
         run: |
@@ -82,5 +83,13 @@ jobs:
       - name: Check security groups
         run: |
           aws ec2 describe-security-groups \
+            --region us-east-1
+
+      - name: Check S3 buckets
+        run: |
+          echo "===== S3 BUCKET ACCESS ====="
+          aws s3api list-buckets \
+            --query "Buckets[].Name" \
+            --output table \
             --region us-east-1
 
